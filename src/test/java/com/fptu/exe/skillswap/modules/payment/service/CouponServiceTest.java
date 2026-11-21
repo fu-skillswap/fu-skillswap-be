@@ -11,6 +11,9 @@ import com.fptu.exe.skillswap.modules.payment.domain.CouponStatus;
 import com.fptu.exe.skillswap.modules.payment.repository.CouponRedemptionRepository;
 import com.fptu.exe.skillswap.modules.payment.repository.CouponRepository;
 import com.fptu.exe.skillswap.modules.payment.dto.response.UserCouponResponse;
+import com.fptu.exe.skillswap.modules.payment.strategy.DiscountStrategyRegistry;
+import com.fptu.exe.skillswap.modules.payment.strategy.FixedAmountDiscountStrategy;
+import com.fptu.exe.skillswap.modules.payment.strategy.PercentageDiscountStrategy;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import org.junit.jupiter.api.Test;
@@ -375,5 +378,139 @@ class CouponServiceTest {
         UserCouponResponse resp = responses.get(0);
         assertFalse(resp.isUsable());
         assertEquals("Coupon chào mừng chỉ dành riêng cho tài khoản Mentee", resp.unusableReason());
+    }
+
+    @Test
+    void estimateBestCouponForPreview_eligibleMenteeAndQuotaAvailable_shouldApplyWelcome70k() {
+        CouponService serviceWithRegistry = new CouponService(
+                couponRepository,
+                couponRedemptionRepository,
+                new DiscountStrategyRegistry(List.of(new FixedAmountDiscountStrategy(), new PercentageDiscountStrategy())),
+                userQueryPort
+        );
+        UUID menteeId = UUID.randomUUID();
+        UUID couponId = UUID.randomUUID();
+        Coupon welcome = Coupon.builder()
+                .id(couponId)
+                .code("WELCOME70K")
+                .title("Ưu đãi chào mừng thành viên mới (Giới hạn 60 suất)")
+                .discountType(CouponDiscountType.FIXED)
+                .discountValue(70_000)
+                .quotaTotal(60)
+                .quotaPerUser(1)
+                .status(CouponStatus.ACTIVE)
+                .build();
+        UserSummaryRecord mentee = new UserSummaryRecord(
+                menteeId, "mentee@test.com", "Mentee", null,
+                Set.of(RoleCode.MENTEE), "ACTIVE", true
+        );
+        when(couponRepository.findByStatus(CouponStatus.ACTIVE)).thenReturn(List.of(welcome));
+        when(userQueryPort.findUserSummaryById(menteeId)).thenReturn(Optional.of(mentee));
+        when(couponRedemptionRepository.countByCouponIdAndStatusIn(eq(couponId), any())).thenReturn(15L);
+        when(couponRedemptionRepository.countByCouponIdAndRedeemerUserIdAndStatusIn(eq(couponId), eq(menteeId), any()))
+                .thenReturn(0L);
+
+        CouponService.CouponPreviewApplication result = serviceWithRegistry.estimateBestCouponForPreview(
+                menteeId, UUID.randomUUID(), UUID.randomUUID(), 110_000);
+
+        assertTrue(result.applied());
+        assertEquals("WELCOME70K", result.couponCode());
+        assertEquals(70_000, result.discountScoin());
+        assertEquals(45, result.remainingQuota());
+    }
+
+    @Test
+    void estimateBestCouponForPreview_anonymousViewerWithQuotaRemaining_shouldShowWelcome70kPromo() {
+        CouponService serviceWithRegistry = new CouponService(
+                couponRepository,
+                couponRedemptionRepository,
+                new DiscountStrategyRegistry(List.of(new FixedAmountDiscountStrategy(), new PercentageDiscountStrategy())),
+                userQueryPort
+        );
+        UUID couponId = UUID.randomUUID();
+        Coupon welcome = Coupon.builder()
+                .id(couponId)
+                .code("WELCOME70K")
+                .title("Ưu đãi chào mừng")
+                .discountType(CouponDiscountType.FIXED)
+                .discountValue(70_000)
+                .quotaTotal(60)
+                .quotaPerUser(1)
+                .status(CouponStatus.ACTIVE)
+                .build();
+        when(couponRepository.findByStatus(CouponStatus.ACTIVE)).thenReturn(List.of(welcome));
+        when(couponRedemptionRepository.countByCouponIdAndStatusIn(eq(couponId), any())).thenReturn(2L);
+
+        CouponService.CouponPreviewApplication result = serviceWithRegistry.estimateBestCouponForPreview(
+                null, UUID.randomUUID(), UUID.randomUUID(), 55_000);
+
+        assertTrue(result.applied());
+        assertEquals("WELCOME70K", result.couponCode());
+        assertEquals(55_000, result.discountScoin());
+        assertEquals(58, result.remainingQuota());
+    }
+
+    @Test
+    void estimateBestCouponForPreview_quotaExhaustedAt60_shouldReturnNone() {
+        CouponService serviceWithRegistry = new CouponService(
+                couponRepository,
+                couponRedemptionRepository,
+                new DiscountStrategyRegistry(List.of(new FixedAmountDiscountStrategy(), new PercentageDiscountStrategy())),
+                userQueryPort
+        );
+        UUID menteeId = UUID.randomUUID();
+        UUID couponId = UUID.randomUUID();
+        Coupon welcome = Coupon.builder()
+                .id(couponId)
+                .code("WELCOME70K")
+                .title("Ưu đãi chào mừng")
+                .discountType(CouponDiscountType.FIXED)
+                .discountValue(70_000)
+                .quotaTotal(60)
+                .quotaPerUser(1)
+                .status(CouponStatus.ACTIVE)
+                .build();
+        when(couponRepository.findByStatus(CouponStatus.ACTIVE)).thenReturn(List.of(welcome));
+        when(couponRedemptionRepository.countByCouponIdAndStatusIn(eq(couponId), any())).thenReturn(60L);
+
+        CouponService.CouponPreviewApplication result = serviceWithRegistry.estimateBestCouponForPreview(
+                menteeId, UUID.randomUUID(), UUID.randomUUID(), 110_000);
+
+        assertFalse(result.applied());
+        assertEquals(0, result.discountScoin());
+        assertNull(result.couponCode());
+    }
+
+    @Test
+    void estimateBestCouponForPreview_menteeAlreadyRedeemed_shouldReturnNone() {
+        CouponService serviceWithRegistry = new CouponService(
+                couponRepository,
+                couponRedemptionRepository,
+                new DiscountStrategyRegistry(List.of(new FixedAmountDiscountStrategy(), new PercentageDiscountStrategy())),
+                userQueryPort
+        );
+        UUID menteeId = UUID.randomUUID();
+        UUID couponId = UUID.randomUUID();
+        Coupon welcome = Coupon.builder()
+                .id(couponId)
+                .code("WELCOME70K")
+                .title("Ưu đãi chào mừng")
+                .discountType(CouponDiscountType.FIXED)
+                .discountValue(70_000)
+                .quotaTotal(60)
+                .quotaPerUser(1)
+                .status(CouponStatus.ACTIVE)
+                .build();
+        when(couponRepository.findByStatus(CouponStatus.ACTIVE)).thenReturn(List.of(welcome));
+        when(couponRedemptionRepository.countByCouponIdAndStatusIn(eq(couponId), any())).thenReturn(10L);
+        when(couponRedemptionRepository.countByCouponIdAndRedeemerUserIdAndStatusIn(eq(couponId), eq(menteeId), any()))
+                .thenReturn(1L);
+
+        CouponService.CouponPreviewApplication result = serviceWithRegistry.estimateBestCouponForPreview(
+                menteeId, UUID.randomUUID(), UUID.randomUUID(), 110_000);
+
+        assertFalse(result.applied());
+        assertEquals(0, result.discountScoin());
+        assertNull(result.couponCode());
     }
 }

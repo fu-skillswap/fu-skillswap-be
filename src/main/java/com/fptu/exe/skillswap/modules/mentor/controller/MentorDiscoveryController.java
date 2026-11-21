@@ -113,7 +113,8 @@ public class MentorDiscoveryController {
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID mentorUserId
     ) {
-        return ApiResponse.success(mentorDiscoveryService.getMentorDetail(mentorUserId));
+        return ApiResponse.success(mentorDiscoveryService.getMentorDetail(
+                mentorUserId, principal == null ? null : principal.getPublicId()));
     }
 
     @Operation(
@@ -127,10 +128,12 @@ public class MentorDiscoveryController {
     })
     @GetMapping("/{mentorUserId}/availability-preview")
     public ApiResponse<MentorPublicAvailabilityPreviewResponse> getPublicAvailabilityPreview(
+            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID mentorUserId,
             @ParameterObject @ModelAttribute AvailabilityQueryRequest request
     ) {
-        return ApiResponse.success(mentorDiscoveryService.getPublicAvailabilityPreview(mentorUserId, request));
+        return ApiResponse.success(mentorDiscoveryService.getPublicAvailabilityPreview(
+                mentorUserId, request, principal == null ? null : principal.getPublicId()));
     }
 
     @Operation(
@@ -185,7 +188,8 @@ public class MentorDiscoveryController {
             @ParameterObject @ModelAttribute AvailabilityQueryRequest request
     ) {
         ensureAuthenticated(principal);
-        return ApiResponse.success(mentorDiscoveryService.getMentorAvailability(mentorUserId, request));
+        return ApiResponse.success(mentorDiscoveryService.getMentorAvailability(
+                mentorUserId, request, principal.getPublicId()));
     }
 
     @Operation(

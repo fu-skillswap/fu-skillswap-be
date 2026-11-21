@@ -25,8 +25,22 @@ public record MentorServiceResponse(
         Integer durationMinutes,
         @Schema(description = "Whether the service is free", example = "true")
         boolean isFree,
-        @Schema(description = "The 110% final service price to be paid by Mentee. 0 means the service is free.", nullable = true, example = "110")
+        @Schema(description = "The 110% final service price to be paid by Mentee before coupon discount. 0 means the service is free.", nullable = true, example = "110000")
         Integer priceScoin,
+        @Schema(description = "Giá gốc ban đầu trước khi trừ coupon để hiển thị gạch ngang (= priceScoin).", nullable = true, example = "110000")
+        Integer originalPriceScoin,
+        @Schema(description = "Giá mới sau khi trừ coupon ưu đãi khả dụng (bằng originalPriceScoin nếu không có coupon áp dụng).", nullable = true, example = "40000")
+        Integer discountedPriceScoin,
+        @Schema(description = "Số Scoin được giảm bởi coupon khả dụng (0 nếu không có coupon hoặc đã hết suất).", nullable = true, example = "70000")
+        Integer couponDiscountScoin,
+        @Schema(description = "Có đang được giảm giá bởi coupon hay không.", example = "true")
+        boolean hasCouponDiscount,
+        @Schema(description = "Mã coupon khả dụng đang được áp dụng để tính giá preview, null nếu không có.", nullable = true, example = "WELCOME70K")
+        String couponCode,
+        @Schema(description = "Tiêu đề coupon khả dụng, null nếu không có.", nullable = true)
+        String couponTitle,
+        @Schema(description = "Số suất coupon còn lại của hệ thống, null nếu không giới hạn hoặc không có coupon.", nullable = true, example = "60")
+        Integer couponRemainingQuota,
         @Schema(description = "Whether the service is currently active for future use", example = "true")
         boolean isActive,
         @Schema(description = "Whether a completed booking keeps direct chat open after the post-session window", example = "false")
@@ -50,6 +64,41 @@ public record MentorServiceResponse(
     @Deprecated(forRemoval = true)
     public boolean active() {
         return isActive;
+    }
+
+    public MentorServiceResponse withPricingPreview(
+            Integer originalPriceScoin,
+            Integer discountedPriceScoin,
+            Integer couponDiscountScoin,
+            boolean hasCouponDiscount,
+            String couponCode,
+            String couponTitle,
+            Integer couponRemainingQuota
+    ) {
+        return new MentorServiceResponse(
+                serviceId,
+                mentorUserId,
+                title,
+                description,
+                expectedOutcome,
+                durationMinutes,
+                isFree,
+                originalPriceScoin,
+                originalPriceScoin,
+                discountedPriceScoin,
+                couponDiscountScoin,
+                hasCouponDiscount,
+                couponCode,
+                couponTitle,
+                couponRemainingQuota,
+                isActive,
+                maintainPostSessionChat,
+                deliveryMode,
+                coverImageUrl,
+                version,
+                createdAt,
+                updatedAt
+        );
     }
 
     /** Keeps Java test fixtures compiling while JSON exposes only isFree/isActive. */

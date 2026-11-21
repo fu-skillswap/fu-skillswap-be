@@ -16,9 +16,45 @@ public record AvailabilitySlotServiceBasicResponse(
         Integer durationMinutes,
         @Schema(description = "Service miễn phí hay trả phí")
         boolean isFree,
-        @Schema(description = "Đơn giá service theo Scoin nếu không miễn phí")
+        @Schema(description = "Đơn giá service gốc theo Scoin (110% đã gồm phí nền tảng) nếu không miễn phí")
         Integer priceScoin,
+        @Schema(description = "Giá gốc ban đầu trước khi trừ coupon để hiển thị gạch ngang")
+        Integer originalPriceScoin,
+        @Schema(description = "Giá mới sau khi trừ coupon ưu đãi khả dụng")
+        Integer discountedPriceScoin,
+        @Schema(description = "Số Scoin được giảm bởi coupon khả dụng")
+        Integer couponDiscountScoin,
+        @Schema(description = "Có đang áp dụng coupon giảm giá hay không")
+        boolean hasCouponDiscount,
+        @Schema(description = "Mã coupon khả dụng được áp dụng preview, null nếu không có", nullable = true)
+        String couponCode,
+        @Schema(description = "Số suất coupon còn lại của hệ thống, null nếu không giới hạn hoặc không có coupon", nullable = true)
+        Integer couponRemainingQuota,
         @Schema(description = "Khả năng gỡ binding service này khỏi slot")
         SlotMutationCapabilityResponse bindingRemoval
 ) {
+    /** Compatibility constructor for mentor-owned slot management callers without promo preview fields. */
+    public AvailabilitySlotServiceBasicResponse(
+            UUID serviceId,
+            String title,
+            Integer durationMinutes,
+            boolean isFree,
+            Integer priceScoin,
+            SlotMutationCapabilityResponse bindingRemoval
+    ) {
+        this(
+                serviceId,
+                title,
+                durationMinutes,
+                isFree,
+                priceScoin,
+                priceScoin,
+                priceScoin,
+                0,
+                false,
+                null,
+                null,
+                bindingRemoval
+        );
+    }
 }

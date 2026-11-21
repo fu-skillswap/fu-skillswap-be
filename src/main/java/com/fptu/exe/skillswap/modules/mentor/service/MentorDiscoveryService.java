@@ -36,6 +36,8 @@ import com.fptu.exe.skillswap.modules.mentor.service.discovery.DiscoveryMapper;
 import com.fptu.exe.skillswap.modules.feedback.dto.response.MentorReviewResponse;
 import com.fptu.exe.skillswap.modules.feedback.port.FeedbackQueryPort;
 import com.fptu.exe.skillswap.modules.feedback.port.MentorReviewProjection;
+import com.fptu.exe.skillswap.modules.mentor.port.ServiceSlotCandidate;
+import com.fptu.exe.skillswap.modules.payment.port.ServicePricingQueryPort;
 import com.fptu.exe.skillswap.shared.dto.request.BasePageRequest;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -84,6 +86,12 @@ public class MentorDiscoveryService {
     private final MentorRecommendationFacade mentorRecommendationFacade;
     private final MentorBookingPolicyService mentorBookingPolicyService;
     private final BlogQueryPort blogQueryPort;
+    private ServicePricingQueryPort servicePricingQueryPort;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setServicePricingQueryPort(ServicePricingQueryPort servicePricingQueryPort) {
+        this.servicePricingQueryPort = servicePricingQueryPort;
+    }
 
     @Transactional(readOnly = true)
     public PageResponse<MentorDiscoveryCardResponse> searchMentors(UUID currentUserId, MentorDiscoverySearchRequest request) {
@@ -242,6 +250,11 @@ public class MentorDiscoveryService {
 
     @Transactional(readOnly = true)
     public MentorDiscoveryDetailResponse getMentorDetail(UUID mentorUserId) {
+        return getMentorDetail(mentorUserId, null);
+    }
+
+    @Transactional(readOnly = true)
+    public MentorDiscoveryDetailResponse getMentorDetail(UUID mentorUserId, UUID viewerUserId) {
         MentorProfile mentorProfile = getDiscoverableMentorProfile(mentorUserId);
         internalTelemetryService.record("MENTOR_VIEWED", null, "MENTOR", mentorUserId, Map.of());
         StudentProfile studentProfile = userQueryPort.findStudentProfileWithDetailsByUserId(mentorUserId).orElse(null);
@@ -250,10 +263,27 @@ public class MentorDiscoveryService {
         List<MentorSubjectResultResponse> subjectResults = enrichedData.subjectResults();
         List<MentorFeaturedProjectResponse> featuredProjects = enrichedData.featuredProjects();
         List<MentorAchievementResponse> achievements = enrichedData.achievements();
-        List<MentorServiceResponse> services = mentorServiceRepository
-                .findByMentorProfileUserIdAndIsActiveTrueOrderByCreatedAtAsc(mentorUserId)
-                .stream()
-                .map(discoveryMapper::toServiceResponse)
+        List<MentorService> activeServices = mentorServiceRepository
+                .findByMentorProfileUserIdAndIsActiveTrueOrderByCreatedAtAsc(mentorUserId);
+        Map<UUID, ServicePricingQueryPort.ServicePricePreview> pricePreviews =
+                estimateServiceEntityPrices(viewerUserId, mentorUserId, activeServices);
+        List<MentorServiceResponse> services = activeServices.stream()
+                .map(service -> {
+                    MentorServiceResponse mapped = discoveryMapper.toServiceResponse(service);
+                    ServicePricingQueryPort.ServicePricePreview preview = pricePreviews.get(service.getId());
+                    if (preview == null) {
+                        return mapped;
+                    }
+                    return mapped.withPricingPreview(
+                            preview.originalPriceScoin(),
+                            preview.discountedPriceScoin(),
+                            preview.couponDiscountScoin(),
+                            preview.hasCouponDiscount(),
+                            preview.couponCode(),
+                            preview.couponTitle(),
+                            preview.couponRemainingQuota()
+                    );
+                })
                 .toList();
 
         Campus campus = studentProfile == null ? null : studentProfile.getCampus();
@@ -313,14 +343,28 @@ public class MentorDiscoveryService {
 
     @Transactional
     public List<MentorAvailabilitySlotResponse> getMentorAvailability(UUID mentorUserId, AvailabilityQueryRequest request) {
+        return getMentorAvailability(mentorUserId, request, null);
+    }
+
+    @Transactional
+    public List<MentorAvailabilitySlotResponse> getMentorAvailability(
+            UUID mentorUserId,
+            AvailabilityQueryRequest request,
+            UUID viewerUserId
+    ) {
         internalTelemetryService.record("AVAILABILITY_OPENED", null, "MENTOR", mentorUserId, Map.of());
         MentorProfile mentorProfile = getDiscoverableMentorProfile(mentorUserId);
         if (isBookingSuspended(mentorProfile)) {
             return List.of();
         }
         AvailabilityQueryRequest safeRequest = request == null ? new AvailabilityQueryRequest() : request;
-        return mentorAvailabilityService.getAvailableSlots(mentorUserId, safeRequest.getFromDate(), safeRequest.getToDate())
-                .stream().map(this::toMentorAvailabilitySlotResponse).toList();
+        List<com.fptu.exe.skillswap.modules.mentor.port.MentorPublicAvailability> slots =
+                mentorAvailabilityService.getAvailableSlots(mentorUserId, safeRequest.getFromDate(), safeRequest.getToDate());
+        Map<UUID, ServicePricingQueryPort.ServicePricePreview> pricePreviews =
+                estimateSlotServicePrices(viewerUserId, mentorUserId, slots);
+        return slots.stream()
+                .map(slot -> toMentorAvailabilitySlotResponse(slot, pricePreviews))
+                .toList();
     }
 
     /**
@@ -331,6 +375,15 @@ public class MentorDiscoveryService {
     public MentorPublicAvailabilityPreviewResponse getPublicAvailabilityPreview(
             UUID mentorUserId,
             AvailabilityQueryRequest request
+    ) {
+        return getPublicAvailabilityPreview(mentorUserId, request, null);
+    }
+
+    @Transactional(readOnly = true)
+    public MentorPublicAvailabilityPreviewResponse getPublicAvailabilityPreview(
+            UUID mentorUserId,
+            AvailabilityQueryRequest request,
+            UUID viewerUserId
     ) {
         MentorProfile mentorProfile = getDiscoverableMentorProfile(mentorUserId);
         if (isBookingSuspended(mentorProfile)) {
@@ -347,12 +400,14 @@ public class MentorDiscoveryService {
         boolean offerAvailable = mentorBookingPolicyService.isPublicBookingOfferAvailable(
                 mentorProfile, hasActiveService, currentTime()) && !slots.isEmpty();
 
+        Map<UUID, ServicePricingQueryPort.ServicePricePreview> pricePreviews =
+                estimateSlotServicePrices(viewerUserId, mentorUserId, slots);
         List<MentorPublicAvailabilityPreviewResponse.Slot> previewSlots = slots.stream()
                 .map(slot -> new MentorPublicAvailabilityPreviewResponse.Slot(
                         slot.startTime(),
                         slot.endTime(),
                         slot.services().stream()
-                                .map(this::toPublicAvailabilityPreviewService)
+                                .map(service -> toPublicAvailabilityPreviewService(service, pricePreviews.get(service.serviceId())))
                                 .toList()))
                 .toList();
         LocalDateTime nextAvailableAt = previewSlots.isEmpty() ? null : previewSlots.getFirst().startTime();
@@ -445,23 +500,100 @@ public class MentorDiscoveryService {
     }
 
     private MentorPublicAvailabilityPreviewResponse.Service toPublicAvailabilityPreviewService(
-            com.fptu.exe.skillswap.modules.mentor.port.ServiceSlotCandidate service
+            ServiceSlotCandidate service,
+            ServicePricingQueryPort.ServicePricePreview preview
     ) {
+        if (preview == null) {
+            return new MentorPublicAvailabilityPreviewResponse.Service(
+                    service.serviceId(), service.title(), service.durationMinutes(),
+                    Boolean.TRUE.equals(service.isFree()), service.priceScoin());
+        }
         return new MentorPublicAvailabilityPreviewResponse.Service(
-                service.serviceId(), service.title(), service.durationMinutes(), Boolean.TRUE.equals(service.isFree()), service.priceScoin());
+                service.serviceId(),
+                service.title(),
+                service.durationMinutes(),
+                Boolean.TRUE.equals(service.isFree()),
+                preview.originalPriceScoin(),
+                preview.originalPriceScoin(),
+                preview.discountedPriceScoin(),
+                preview.couponDiscountScoin(),
+                preview.hasCouponDiscount(),
+                preview.couponCode(),
+                preview.couponRemainingQuota()
+        );
     }
 
     private MentorAvailabilitySlotResponse toMentorAvailabilitySlotResponse(
-            com.fptu.exe.skillswap.modules.mentor.port.MentorPublicAvailability slot) {
+            com.fptu.exe.skillswap.modules.mentor.port.MentorPublicAvailability slot,
+            Map<UUID, ServicePricingQueryPort.ServicePricePreview> pricePreviews
+    ) {
         return MentorAvailabilitySlotResponse.builder()
                 .slotId(slot.slotId()).startTime(slot.startTime()).endTime(slot.endTime()).timezone(slot.timezone())
                 .durationMinutes(slot.durationMinutes()).teachingMode(null)
                 .pendingRequestCount(slot.pendingRequestCount()).acceptedSlotCount(slot.acceptedSlotCount())
                 .maxPendingRequests(slot.maxPendingRequests()).remainingRequestSlots(slot.remainingRequestSlots())
-                .services(slot.services().stream().map(service -> AvailabilitySlotServiceBasicResponse.builder()
-                        .serviceId(service.serviceId()).title(service.title()).durationMinutes(service.durationMinutes())
-                        .isFree(Boolean.TRUE.equals(service.isFree())).priceScoin(service.priceScoin()).build()).toList())
+                .services(slot.services().stream().map(service -> {
+                    ServicePricingQueryPort.ServicePricePreview preview =
+                            pricePreviews == null ? null : pricePreviews.get(service.serviceId());
+                    int original = preview != null ? preview.originalPriceScoin()
+                            : (service.priceScoin() == null ? 0 : service.priceScoin());
+                    int discounted = preview != null ? preview.discountedPriceScoin() : original;
+                    int discount = preview != null ? preview.couponDiscountScoin() : 0;
+                    boolean hasDiscount = preview != null && preview.hasCouponDiscount();
+                    return AvailabilitySlotServiceBasicResponse.builder()
+                            .serviceId(service.serviceId())
+                            .title(service.title())
+                            .durationMinutes(service.durationMinutes())
+                            .isFree(Boolean.TRUE.equals(service.isFree()))
+                            .priceScoin(original)
+                            .originalPriceScoin(original)
+                            .discountedPriceScoin(discounted)
+                            .couponDiscountScoin(discount)
+                            .hasCouponDiscount(hasDiscount)
+                            .couponCode(preview != null ? preview.couponCode() : null)
+                            .couponRemainingQuota(preview != null ? preview.couponRemainingQuota() : null)
+                            .build();
+                }).toList())
                 .build();
+    }
+
+    private Map<UUID, ServicePricingQueryPort.ServicePricePreview> estimateServiceEntityPrices(
+            UUID viewerUserId,
+            UUID mentorUserId,
+            List<MentorService> services
+    ) {
+        if (servicePricingQueryPort == null || services == null || services.isEmpty()) {
+            return Map.of();
+        }
+        List<ServicePricingQueryPort.ServicePriceTarget> targets = services.stream()
+                .map(service -> new ServicePricingQueryPort.ServicePriceTarget(
+                        service.getId(),
+                        service.getMentorProfile() != null ? service.getMentorProfile().getUserId() : mentorUserId,
+                        service.isFree(),
+                        service.getPriceScoin()
+                ))
+                .toList();
+        return servicePricingQueryPort.estimateServicePrices(viewerUserId, targets);
+    }
+
+    private Map<UUID, ServicePricingQueryPort.ServicePricePreview> estimateSlotServicePrices(
+            UUID viewerUserId,
+            UUID mentorUserId,
+            List<com.fptu.exe.skillswap.modules.mentor.port.MentorPublicAvailability> slots
+    ) {
+        if (servicePricingQueryPort == null || slots == null || slots.isEmpty()) {
+            return Map.of();
+        }
+        List<ServicePricingQueryPort.ServicePriceTarget> targets = slots.stream()
+                .flatMap(slot -> slot.services().stream())
+                .map(service -> new ServicePricingQueryPort.ServicePriceTarget(
+                        service.serviceId(),
+                        service.mentorUserId() != null ? service.mentorUserId() : mentorUserId,
+                        Boolean.TRUE.equals(service.isFree()),
+                        service.priceScoin()
+                ))
+                .toList();
+        return targets.isEmpty() ? Map.of() : servicePricingQueryPort.estimateServicePrices(viewerUserId, targets);
     }
 
     private boolean isBookingSuspended(MentorProfile mentorProfile) {

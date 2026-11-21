@@ -128,6 +128,8 @@ public class DiscoveryMapper {
     }
 
     public MentorServiceResponse toServiceResponse(MentorService mentorService) {
+        int menteePrice = mentorService.isFree() || defaultInteger(mentorService.getPriceScoin()) == 0 ? 0
+                : PricingPolicy.menteePayableScoin(defaultInteger(mentorService.getPriceScoin()), paymentProperties);
         return MentorServiceResponse.builder()
                 .serviceId(mentorService.getId())
                 .mentorUserId(mentorService.getMentorProfile() == null ? null : mentorService.getMentorProfile().getUserId())
@@ -136,8 +138,11 @@ public class DiscoveryMapper {
                 .expectedOutcome(mentorService.getExpectedOutcome())
                 .durationMinutes(mentorService.getDurationMinutes())
                 .isFree(mentorService.isFree())
-                .priceScoin(mentorService.isFree() || defaultInteger(mentorService.getPriceScoin()) == 0 ? 0
-                        : PricingPolicy.menteePayableScoin(defaultInteger(mentorService.getPriceScoin()), paymentProperties))
+                .priceScoin(menteePrice)
+                .originalPriceScoin(menteePrice)
+                .discountedPriceScoin(menteePrice)
+                .couponDiscountScoin(0)
+                .hasCouponDiscount(false)
                 .isActive(mentorService.isActive())
                 .maintainPostSessionChat(mentorService.isMaintainPostSessionChat())
                 .deliveryMode(mentorService.getDeliveryMode())

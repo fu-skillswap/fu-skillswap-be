@@ -24,6 +24,21 @@ public record MentorPublicAvailabilityPreviewResponse(
         }
     }
 
-    public record Service(UUID serviceId, String title, Integer durationMinutes, boolean isFree, Integer priceScoin) {
+    public record Service(
+            UUID serviceId,
+            String title,
+            Integer durationMinutes,
+            boolean isFree,
+            Integer priceScoin,
+            Integer originalPriceScoin,
+            Integer discountedPriceScoin,
+            Integer couponDiscountScoin,
+            boolean hasCouponDiscount,
+            String couponCode,
+            Integer couponRemainingQuota
+    ) {
+        public Service(UUID serviceId, String title, Integer durationMinutes, boolean isFree, Integer priceScoin) {
+            this(serviceId, title, durationMinutes, isFree, priceScoin, priceScoin, priceScoin, 0, false, null, null);
+        }
     }
 }

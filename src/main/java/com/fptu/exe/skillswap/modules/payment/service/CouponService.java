@@ -23,10 +23,12 @@ import com.fptu.exe.skillswap.modules.payment.strategy.DiscountStrategyRegistry;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -260,5 +262,154 @@ public class CouponService {
                 .isUsable(isUsable)
                 .unusableReason(unusableReason)
                 .build();
+    }
+
+    /**
+     * Evaluates the best active, remaining-quota-available coupon for service discovery / quote preview.
+     * Enforces limited system quota and per-user eligibility without reserving a redemption slot.
+     */
+    @Transactional(readOnly = true)
+    public CouponPreviewApplication estimateBestCouponForPreview(
+            UUID viewerUserId,
+            UUID mentorUserId,
+            UUID serviceId,
+            int grossScoin
+    ) {
+        if (grossScoin <= 0) {
+            return CouponPreviewApplication.none();
+        }
+        CouponPreviewContext context = preparePreviewContext(viewerUserId);
+        return resolveBestCoupon(context, mentorUserId, serviceId, grossScoin);
+    }
+
+    @Transactional(readOnly = true)
+    public CouponPreviewContext preparePreviewContext(UUID viewerUserId) {
+        List<Coupon> activeCoupons = couponRepository.findByStatus(CouponStatus.ACTIVE);
+        if (activeCoupons == null || activeCoupons.isEmpty()) {
+            return CouponPreviewContext.empty();
+        }
+
+        LocalDateTime now = timeProvider.nowBusiness();
+        UserSummaryRecord viewerSummary = (viewerUserId != null && userQueryPort != null)
+                ? userQueryPort.findUserSummaryById(viewerUserId).orElse(null)
+                : null;
+
+        List<CouponPreviewCandidate> candidates = new ArrayList<>();
+        for (Coupon coupon : activeCoupons) {
+            if (!isWithinDateWindow(coupon, now)) {
+                continue;
+            }
+            long totalUsed = couponRedemptionRepository.countByCouponIdAndStatusIn(
+                    coupon.getId(), ACTIVE_REDEMPTION_STATUSES);
+            Integer remainingQuota = coupon.getQuotaTotal() != null
+                    ? Math.max(0, coupon.getQuotaTotal() - (int) totalUsed)
+                    : null;
+            if (remainingQuota != null && remainingQuota <= 0) {
+                continue;
+            }
+            if (viewerUserId != null && coupon.getQuotaPerUser() != null) {
+                long perUserUsed = couponRedemptionRepository.countByCouponIdAndRedeemerUserIdAndStatusIn(
+                        coupon.getId(), viewerUserId, ACTIVE_REDEMPTION_STATUSES);
+                if (perUserUsed >= coupon.getQuotaPerUser()) {
+                    continue;
+                }
+            }
+            if ("WELCOME70K".equalsIgnoreCase(coupon.getCode()) && viewerUserId != null) {
+                if (viewerSummary == null || !viewerSummary.hasRole(RoleCode.MENTEE)) {
+                    continue;
+                }
+            }
+            Set<UUID> serviceIds = coupon.getApplicableServiceIds() == null
+                    ? Set.of()
+                    : Set.copyOf(coupon.getApplicableServiceIds());
+            Set<UUID> mentorIds = coupon.getApplicableMentorIds() == null
+                    ? Set.of()
+                    : Set.copyOf(coupon.getApplicableMentorIds());
+            candidates.add(new CouponPreviewCandidate(coupon, remainingQuota, serviceIds, mentorIds));
+        }
+        return new CouponPreviewContext(candidates);
+    }
+
+    @Transactional(readOnly = true)
+    public CouponPreviewApplication resolveBestCoupon(
+            CouponPreviewContext context,
+            UUID mentorUserId,
+            UUID serviceId,
+            int grossScoin
+    ) {
+        if (context == null || context.candidates().isEmpty() || grossScoin <= 0) {
+            return CouponPreviewApplication.none();
+        }
+        CouponPreviewApplication best = CouponPreviewApplication.none();
+        for (CouponPreviewCandidate candidate : context.candidates()) {
+            Coupon coupon = candidate.coupon();
+            if (coupon.getMinOrderValueScoin() != null && grossScoin < coupon.getMinOrderValueScoin()) {
+                continue;
+            }
+            if (!candidate.applicableServiceIds().isEmpty()
+                    && (serviceId == null || !candidate.applicableServiceIds().contains(serviceId))) {
+                continue;
+            }
+            if (!candidate.applicableMentorIds().isEmpty()
+                    && (mentorUserId == null || !candidate.applicableMentorIds().contains(mentorUserId))) {
+                continue;
+            }
+            int discountScoin = Math.max(0, Math.min(grossScoin, calculateCouponDiscount(coupon, grossScoin)));
+            if (discountScoin <= 0) {
+                continue;
+            }
+            boolean better = discountScoin > best.discountScoin()
+                    || (discountScoin == best.discountScoin()
+                    && best.couponCode() != null
+                    && coupon.getCode() != null
+                    && coupon.getCode().compareToIgnoreCase(best.couponCode()) < 0);
+            if (better) {
+                best = new CouponPreviewApplication(
+                        coupon.getId(),
+                        coupon.getCode(),
+                        coupon.getTitle(),
+                        discountScoin,
+                        candidate.remainingQuota()
+                );
+            }
+        }
+        return best;
+    }
+
+    private boolean isWithinDateWindow(Coupon coupon, LocalDateTime now) {
+        if (coupon.getStartAt() != null && now.isBefore(coupon.getStartAt())) {
+            return false;
+        }
+        return coupon.getEndAt() == null || !now.isAfter(coupon.getEndAt());
+    }
+
+    public record CouponPreviewApplication(
+            UUID couponId,
+            String couponCode,
+            String couponTitle,
+            int discountScoin,
+            Integer remainingQuota
+    ) {
+        public static CouponPreviewApplication none() {
+            return new CouponPreviewApplication(null, null, null, 0, null);
+        }
+
+        public boolean applied() {
+            return couponId != null && discountScoin > 0;
+        }
+    }
+
+    public record CouponPreviewContext(List<CouponPreviewCandidate> candidates) {
+        public static CouponPreviewContext empty() {
+            return new CouponPreviewContext(List.of());
+        }
+    }
+
+    public record CouponPreviewCandidate(
+            Coupon coupon,
+            Integer remainingQuota,
+            Set<UUID> applicableServiceIds,
+            Set<UUID> applicableMentorIds
+    ) {
     }
 }
