@@ -61,6 +61,17 @@ public interface UserRepository extends JpaRepository<User, UUID> {
               and (:menteeRole member of u.roles or :mentorRole member of u.roles)
               and :adminRole not member of u.roles
               and :systemAdminRole not member of u.roles
+              and exists (
+                    select 1
+                    from StudentProfile sp
+                    where sp.userId = u.id
+                      and sp.campus is not null
+                      and sp.program is not null
+                      and sp.specialization is not null
+                      and sp.semester is not null
+                      and sp.claimedStudentCode is not null
+                      and trim(sp.claimedStudentCode) <> ''
+              )
             """)
     Page<User> searchAdminVisibleUsers(
             @Param("keywordPattern") String keywordPattern,

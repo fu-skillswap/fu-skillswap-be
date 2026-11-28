@@ -42,7 +42,7 @@ public class AdminUserController {
 
     @Operation(
             summary = "Lấy danh sách visible users",
-            description = "Trả về danh sách user không phải admin mà admin vận hành được phép nhìn thấy. FE admin dùng cho các màn moderation với keyword, role, status, pagination và sorting; tài khoản ADMIN và SYSTEM_ADMIN được loại khỏi danh sách này theo thiết kế."
+            description = "Trả về danh sách user không phải admin mà admin vận hành được phép nhìn thấy và đã hoàn thành student-profile ban đầu. FE admin dùng cho các màn moderation với keyword, role, status, pagination và sorting; tài khoản ADMIN, SYSTEM_ADMIN và user chưa điền student-profile được loại khỏi danh sách này."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Danh sách người dùng"),
